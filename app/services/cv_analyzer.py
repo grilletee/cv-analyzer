@@ -1,4 +1,5 @@
 import json
+import re
 from google import genai
 from app.schemas.cv import CVAnalysisRequest, CVAnalysisResponse
 
@@ -28,5 +29,18 @@ def analyze_cv(request: CVAnalysisRequest, client: genai.Client) -> CVAnalysisRe
     )
 
     raw = response.text.strip()
-    data = json.loads(raw)
+
+    # Elimina bloques markdown si Gemini los añade igualmente
+    raw = re.sub(r"```json|```", "", raw).strip()
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Gemini devolvió una respuesta no parseable como JSON: {e}\nRespuesta raw: {raw}")
+
+    required_keys = {"score", "summary", "strengths", "weaknesses", "suggestions", "keywords_missing", "estimated_level"}
+    missing = required_keys - data.keys()
+    if missing:
+        raise ValueError(f"La respuesta de Gemini omitió campos obligatorios: {missing}")
+
     return CVAnalysisResponse(**data)
